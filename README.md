@@ -1,4 +1,4 @@
-# Egyetemi RFID/NFC jelenlétkezelő rendszer
+# RFID/NFC-ALAPÚ EGYETEMI JELENLÉTKEZELŐ RENDSZER TERVEZÉSE ÉS MEGVALÓSÍTÁSA
 
 Ez a projekt egyetemi jelenléti és épületbelépési események kezelésére készült. A hallgató NFC-kártyájának UID-je alapján a rendszer azonosítja a felhasználót, ellenőrzi az aktív kurzusfelvételt és a kurzusalkalom időablakát, majd rögzíti az órai jelenlétet. Az épületbe történő belépést és kilépést ettől külön kezeli.
 
