@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><h1 id="welcome">Áttekintő</h1><p>Kurzusok, órák és jelenléti adatok egy helyen.</p></div></section>
+<section id="summaryCards" class="summary-grid"></section>
+<section class="card"><div class="section-heading"><h2>Következő órák</h2><a class="button secondary" href="/sessions">Órarend megnyitása</a></div><div class="table-scroll"><table><thead><tr><th>Kurzus</th><th>Kezdés</th><th>Terem</th><th>Jelenlét</th><th>Állapot</th></tr></thead><tbody id="upcomingRows"></tbody></table></div><p id="dashboardMessage" class="message" role="status"></p></section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function json(url){const response=await fetch(url);const data=await response.json();if(!response.ok)throw new Error(data.message||'Az áttekintő nem tölthető be.');return data;}
+function metric(label,value){const item=document.createElement('div');item.className='metric';const number=document.createElement('strong');number.textContent=value;const caption=document.createElement('span');caption.textContent=label;item.append(number,caption);return item;}
+document.addEventListener('DOMContentLoaded',async()=>{const output=document.getElementById('dashboardMessage');try{const [identity,courses,sessions]=await Promise.all([json('/api/auth/me'),json('/api/courses/'),json('/api/sessions/')]);document.getElementById('welcome').textContent=`Szia, ${identity.name}`;const summary=document.getElementById('summaryCards');summary.append(metric(identity.role==='admin'?'Aktív kurzusok':'Saját kurzusok',courses.length),metric('Órák',sessions.length),metric('Rögzített jelenlétek',sessions.reduce((sum,item)=>sum+Number(item.present_count||0),0)));const body=document.getElementById('upcomingRows');body.replaceChildren();const now=new Date();const upcoming=sessions.filter(item=>item.status!=='closed'&&item.status!=='cancelled'&&new Date(item.ends_at)>=now).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at)).slice(0,10);for(const item of upcoming){const row=document.createElement('tr');for(const value of [`${item.course_code} · ${item.course_name}`,new Date(item.starts_at).toLocaleString('hu-HU'),item.room||'-',`${item.present_count||0}/${item.roster_size||0}`,{planned:'Ütemezve',open:'Aktív'}[item.status]||item.status]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}body.appendChild(row);}if(!upcoming.length)output.textContent='Nincs közelgő óra.';}catch(error){output.textContent=error.message;output.className='message error';}});
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+GYORSSEGÉD
+
+Indítás
+  Asztali alkalmazás:  python main.py
+  Webalkalmazás:       python main.py --web
+  Webes cím:           http://127.0.0.1:5000
+
+Tesztfiókok
+  Ezek a belépési adatok kizárólag a helyi tesztadatbázishoz tartoznak.
+
+  Oktató A
+    E-mail:  oktatoa@teszt.hu
+    Jelszó:  teszt123
+
+  Oktató B
+    E-mail:  oktatob@teszt.hu
+    Jelszó:  teszt123
+
+  Adminisztrátor
+    E-mail:  admin@teszt.hu
+    Jelszó:  adminadmin12
+
+Az adminjelszó nem rögzített vagy visszakereshető alapérték. Ha módosítani
+kell, futtasd a projekt gyökérmappájában a következő parancsot, majd add meg
+az admin e-mail-címét, nevét és az új jelszót:
+  python -m utils.create_admin
+
+Alapvető használat
+  1. Az adminisztrátor a webes felületen hozhat létre hallgatói és oktatói
+     fiókokat, kezelheti a kártyákat és a kurzusokat.
+  2. A hallgatóhoz rendelj egy kártya UID-t, és vedd fel a megfelelő kurzusra.
+  3. Rögzíts egy kurzusalkalmat. Az alkalom időablakában a kártyaolvasás
+     automatikusan kezeli a jelenlétet.
+  4. Az oktató a saját kurzusainak névsorát, alkalmait és jelenléti adatait
+     tekintheti meg. A jelenlét módosításai előzményként is rögzülnek.
+  5. Hallgatói importnál a Név és Neptun-kód oszlop kötelező; az e-mail
+     megadása opcionális. Import előtt használd az előnézetet.
+
+Megjegyzések
+  A hallgatói fiókokkal nem lehet a webes felületre bejelentkezni.
+  Az NFC-olvasáshoz PC/SC-kompatibilis olvasó és illesztőprogram szükséges.
+  A kártya UID-je technikai azonosító, önmagában nem igazolja teljes
+  bizonyossággal a kártyabirtokos személyazonosságát.
+
+További részletek és telepítés: README.md

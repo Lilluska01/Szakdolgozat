@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><h1>Kurzusok</h1><p>Kurzusadatok, oktatói hozzárendelések és hallgatói névsorok.</p></div><a class="button secondary" href="/sessions">Alkalmak</a></section>
+<section class="card" id="courseCreatePanel" hidden>
+  <h2>Új kurzus</h2>
+  <form id="courseForm" class="form-grid">
+    <label>Kód<input class="input" id="courseCode" maxlength="32" placeholder="pl. PROG2" required></label>
+    <label>Kurzus neve<input class="input" id="courseName" maxlength="160" placeholder="Programozás II." required></label>
+    <label>Oktató<select class="input" id="teacherId"></select></label>
+    <label>Leírás<input class="input" id="courseDescription" maxlength="4000" placeholder="Rövid leírás"></label>
+    <button class="button" type="submit">Kurzus létrehozása</button>
+  </form>
+  <p id="courseMessage" class="message" role="status"></p>
+</section>
+<section class="card">
+  <div class="section-heading"><h2>Kurzusok</h2><div class="toolbar"><input id="courseSearch" class="input compact" placeholder="Kód vagy név"><button id="refreshCourses" class="button secondary">Frissítés</button></div></div>
+  <div class="table-scroll"><table><thead><tr><th>Kód</th><th>Kurzus</th><th>Oktató</th><th>Hallgatók</th><th>Azonosító</th><th>Művelet</th></tr></thead><tbody id="coursesTable"></tbody></table></div>
+</section>
+<section id="rosterCard" class="card" hidden>
+  <div class="section-heading"><div><h2 id="rosterTitle">Hallgatói névsor</h2><p class="muted">A visszavont hallgatók nem jelennek meg az aktív névsorokban; a lezárt alkalmak jelenléti előzményei megmaradnak.</p></div><button class="button secondary" id="closeRoster">Bezárás</button></div>
+  <div id="enrollControls"><label for="enrollmentCandidates">Hallgatók felvétele</label>
+  <select class="input" id="enrollmentCandidates" multiple size="7"></select>
+  <div class="toolbar"><button class="button" id="enrollSelected">Kijelöltek felvétele</button><span id="rosterMessage" class="message"></span></div>
+  </div>
+  <div class="table-scroll"><table><thead><tr><th>Név</th><th>Neptun</th><th>E-mail</th><th>Kártya UID</th><th>Felvétel</th><th>Művelet</th></tr></thead><tbody id="rosterRows"></tbody></table></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const courseMessage=document.getElementById('courseMessage');let activeCourse=null;
+async function apiJson(url,options={}){const response=await fetch(url,options);const contentType=response.headers.get('content-type')||'';let data;if(contentType.includes('application/json'))data=await response.json();else{const text=await response.text();throw new Error(response.ok?'A szerver nem JSON választ adott.':`Szerverhiba (${response.status}). Ellenőrizd a szervernaplót.`);}if(!response.ok)throw new Error(data.message||data.error||'A kérés nem sikerült.');return data;}
+let identity=null;
+async function loadCourses(){
+  const body=document.getElementById('coursesTable');body.replaceChildren();
+  try{
+    const query=new URLSearchParams({q:document.getElementById('courseSearch').value});
+    const courses=await apiJson('/api/courses/?'+query);
+    for(const course of courses){
+      const row=document.createElement('tr');
+      for(const value of [course.code,course.name,course.teacher_name||'-',course.student_count||0,course.id]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}
+      const actions=document.createElement('td');const roster=document.createElement('button');roster.className='button secondary';roster.textContent='Névsor';roster.addEventListener('click',()=>openRoster(course));actions.appendChild(roster);
+      if(identity?.role==='admin'){const edit=document.createElement('button');edit.className='button secondary';edit.textContent='Szerkesztés';edit.style.marginLeft='.35rem';edit.addEventListener('click',()=>editCourse(course));actions.appendChild(edit);const remove=document.createElement('button');remove.className='button secondary';remove.textContent='Törlés';remove.style.marginLeft='.35rem';remove.addEventListener('click',()=>deleteCourse(course));actions.appendChild(remove);}
+      row.appendChild(actions);body.appendChild(row);
+    }
+    if(!courses.length){const row=document.createElement('tr');const cell=document.createElement('td');cell.colSpan=6;cell.className='empty';cell.textContent='Nincs találat.';row.appendChild(cell);body.appendChild(row);}
+  }catch(error){courseMessage.textContent=error.message;courseMessage.className='message error';}
+}
+async function editCourse(course){
+  const code=window.prompt('Kurzus kódja:',course.code);if(code===null)return;
+  const name=window.prompt('Kurzus neve:',course.name);if(name===null)return;
+  const description=window.prompt('Leírás:',course.description||'');if(description===null)return;
+  const teachers=window.courseTeachers||[];const choices=teachers.map(t=>`${t.id} – ${t.name}`).join('\n');
+  const teacherValue=window.prompt(`Oktató azonosítója (üres = nincs hozzárendelve):\n${choices}`,course.teacher_id??'');if(teacherValue===null)return;
+  const teacherText=teacherValue.trim();const teacherId=teacherText===''?null:Number(teacherText);
+  if(teacherText!==''&&(!Number.isInteger(teacherId)||!teachers.some(t=>t.id===teacherId))){courseMessage.textContent='Érvényes oktatóazonosítót adj meg a listából.';courseMessage.className='message error';return;}
+  try{await apiJson(`/api/courses/${course.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,name,description,teacher_id:teacherId})});courseMessage.textContent='A kurzus adatai frissültek.';courseMessage.className='message success';await loadCourses();}
+  catch(error){courseMessage.textContent=error.message;courseMessage.className='message error';}
+}
+async function deleteCourse(course){
+  if(!window.confirm(`Biztosan törlöd a(z) ${course.code} kurzust? A kurzus archiválódik, a korábbi jelenléti adatok megmaradnak.`))return;
+  try{await apiJson(`/api/courses/${course.id}`,{method:'DELETE'});courseMessage.textContent='A kurzus törölve (archiválva) lett.';courseMessage.className='message success';await loadCourses();}
+  catch(error){courseMessage.textContent=error.message;courseMessage.className='message error';}
+}
+async function openRoster(course){
+  activeCourse=course;document.getElementById('rosterCard').hidden=false;document.getElementById('rosterTitle').textContent=course.code+' · '+course.name;
+  if(identity.role==='admin')await Promise.all([loadRoster(),loadCandidates()]);else await loadRoster();document.getElementById('rosterCard').scrollIntoView({behavior:'smooth'});
+}
+async function loadRoster(){
+  const body=document.getElementById('rosterRows');body.replaceChildren();const output=document.getElementById('rosterMessage');
+  try{const roster=await apiJson(`/api/courses/${activeCourse.id}/students`);
+    for(const student of roster){const row=document.createElement('tr');for(const value of [student.name,student.neptun||'-',student.email||'-',student.card_id||'Nincs hozzárendelve',student.enrollment_status]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}const action=document.createElement('td');
+      if(identity.role==='admin'&&student.enrollment_status==='active'){const button=document.createElement('button');button.className='button secondary';button.textContent='Visszavonás';button.addEventListener('click',()=>withdraw(student.id));action.appendChild(button);}
+      row.appendChild(action);body.appendChild(row);
+    }
+  }catch(error){output.textContent=error.message;output.className='message error';}
+}
+async function loadCandidates(){
+  const select=document.getElementById('enrollmentCandidates');select.replaceChildren();
+  const [users,enrollments]=await Promise.all([apiJson('/api/users/?role=student&limit=1000'),apiJson(`/api/courses/${activeCourse.id}/students`)]);
+  const active=new Set(enrollments.filter(row=>row.enrollment_status==='active').map(row=>row.id));
+  for(const user of users){if(!user.active||active.has(user.id))continue;const option=document.createElement('option');option.value=user.id;option.textContent=`${user.name} · ${user.neptun||'nincs Neptun'}`;select.appendChild(option);}
+}
+async function withdraw(userId){
+  try{await apiJson(`/api/courses/${activeCourse.id}/students/${userId}`,{method:'DELETE'});await openRoster(activeCourse);await loadCourses();}
+  catch(error){const output=document.getElementById('rosterMessage');output.textContent=error.message;output.className='message error';}
+}
+document.getElementById('enrollSelected').addEventListener('click',async()=>{
+  const ids=[...document.getElementById('enrollmentCandidates').selectedOptions].map(option=>Number(option.value));const output=document.getElementById('rosterMessage');
+  if(!ids.length){output.textContent='Jelölj ki legalább egy hallgatót.';output.className='message error';return;}
+  try{const result=await apiJson(`/api/courses/${activeCourse.id}/students/bulk`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_ids:ids})});output.textContent=`Felvéve: ${result.created.length}; már aktív: ${result.already_enrolled.length}; érvénytelen: ${result.not_found_or_invalid.length}.`;output.className='message success';await openRoster(activeCourse);await loadCourses();}
+  catch(error){output.textContent=error.message;output.className='message error';}
+});
+document.getElementById('courseForm').addEventListener('submit',async event=>{
+  event.preventDefault();courseMessage.textContent='';const payload={code:document.getElementById('courseCode').value,name:document.getElementById('courseName').value,description:document.getElementById('courseDescription').value};const teacher=document.getElementById('teacherId').value;if(teacher)payload.teacher_id=Number(teacher);
+  try{await apiJson('/api/courses/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});courseMessage.textContent='A kurzus létrejött.';courseMessage.className='message success';event.target.reset();loadCourses();}
+  catch(error){courseMessage.textContent=error.message;courseMessage.className='message error';}
+});
+document.getElementById('courseSearch').addEventListener('input',loadCourses);document.getElementById('refreshCourses').addEventListener('click',loadCourses);document.getElementById('closeRoster').addEventListener('click',()=>document.getElementById('rosterCard').hidden=true);document.addEventListener('DOMContentLoaded',async()=>{try{identity=await apiJson('/api/auth/me');if(identity.role==='admin'){document.getElementById('courseCreatePanel').hidden=false;const teachers=await apiJson('/api/users/?role=teacher&limit=1000');window.courseTeachers=teachers;const select=document.getElementById('teacherId');select.replaceChildren();const none=document.createElement('option');none.value='';none.textContent='Nincs hozzárendelve';select.appendChild(none);for(const teacher of teachers){const option=document.createElement('option');option.value=teacher.id;option.textContent=teacher.name;select.appendChild(option);}}else{document.getElementById('courseCreatePanel').remove();document.getElementById('enrollControls').remove();}await loadCourses();}catch(error){courseMessage.textContent=error.message;courseMessage.className='message error';}});
+</script>
+{% endblock %}

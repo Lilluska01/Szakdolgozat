@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><h1>Fiókbeállítások</h1><p>A jelszó módosítása minden aktív munkamenetet visszavon.</p></div></section>
+<section class="card" style="max-width:620px">
+  <form id="passwordForm">
+    <label for="currentPassword">Jelenlegi jelszó</label><input class="input" id="currentPassword" type="password" autocomplete="current-password" required>
+    <label for="newPassword">Új jelszó</label><input class="input" id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+    <label for="confirmPassword">Új jelszó megerősítése</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+    <button class="button">Jelszó frissítése</button>
+  </form>
+  <p id="passwordMessage" class="message" role="status"></p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('passwordForm').addEventListener('submit',async event=>{
+  event.preventDefault();const message=document.getElementById('passwordMessage');const next=document.getElementById('newPassword').value;
+  if(next!==document.getElementById('confirmPassword').value){message.textContent='A két új jelszó nem egyezik.';message.className='message error';return;}
+  try{const response=await fetch('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password:document.getElementById('currentPassword').value,new_password:next})});const data=await response.json();if(!response.ok)throw new Error(data.message||'Nem sikerült a módosítás.');localStorage.removeItem('attendanceToken');message.textContent=data.message;message.className='message success';setTimeout(()=>location.assign('/login'),1500);}
+  catch(error){message.textContent=error.message;message.className='message error';}
+});
+</script>
+{% endblock %}

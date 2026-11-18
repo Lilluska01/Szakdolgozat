@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Egyetemi NFC jelenlétkezelő</title>
+<style>
+:root{font-family:Segoe UI,Arial,sans-serif;color:#182334;background:#f3f6fa}*{box-sizing:border-box}body{margin:0}header{background:#162b4d;color:#fff;padding:16px 24px;font-size:20px;font-weight:650}nav{background:#203d65;padding:10px 24px;display:flex;gap:10px;align-items:center}nav a{color:#fff;text-decoration:none;padding:8px 11px;border-radius:5px}nav a:hover{background:#34557e}.logout{margin-left:auto}.container{max-width:1400px;margin:auto;padding:22px;display:flex;flex-direction:column;gap:18px}.card{background:white;padding:18px;border-radius:9px;box-shadow:0 2px 9px #12233a12}h1{font-size:27px;margin:0 0 5px}h2{margin-top:0;font-size:19px}h3{margin-top:0}.page-heading,.section-heading,.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}.page-heading{margin:4px 0}.page-heading p,.muted{color:#637287;margin:5px 0}.section-heading h2{margin-bottom:0}.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}.form-grid label{font-size:13px;color:#526174}.compact{width:auto;min-width:110px;margin:0}.secondary{background:#52677f}.table-scroll{overflow:auto}.empty{text-align:center;color:#758399;padding:25px}.message{min-height:22px}.success{color:#12683c}.error{color:#a32626}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}.metric{padding:15px;border-radius:8px;background:#fff;box-shadow:0 2px 8px #12233a12;display:flex;flex-direction:column;gap:5px}.metric strong{font-size:23px;color:#174b7d}.metric span{font-size:13px;color:#5a687a}.course-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.course-tile{padding:16px;border:1px solid #e1e7ee;border-radius:8px}.bar-chart{height:230px;display:flex;gap:4px;align-items:stretch;border-bottom:1px solid #c9d2dd;padding:8px 4px 0}.bar-column{flex:1;min-width:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;font-size:10px}.bar-fill{width:min(80%,30px);background:#277cb6;border-radius:4px 4px 0 0;min-height:2px}.bar-column small{color:#59697b}.hourly .bar-column{max-width:50px}.modal{position:fixed;inset:0;background:#0b1d33a8;display:grid;place-items:center;padding:24px}.modal[hidden]{display:none}.modal-content{background:white;border-radius:10px;padding:22px;max-width:950px;width:100%;max-height:90vh;overflow:auto}.float-right{float:right}nav{flex-wrap:wrap}@media(max-width:700px){.page-heading,.section-heading{align-items:flex-start;flex-direction:column}nav{gap:2px;padding:8px}nav a{padding:7px;font-size:13px}.container{padding:12px}}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #e5eaf0}th{background:#f4f7fa}.button{background:#1769aa;color:white;border:0;padding:9px 14px;border-radius:5px;cursor:pointer}.button:hover{background:#105487}.input{display:block;padding:10px;width:100%;margin:6px 0 14px;border:1px solid #cbd5df;border-radius:5px}
+</style>
+</head>
+<body>
+<header>Egyetemi NFC jelenlétkezelő</header>
+<nav><a href="/">Áttekintő</a><a href="/users" data-roles="admin,teacher">Hallgatók és kártyák</a><a href="/courses" data-roles="admin,teacher">Kurzusaim</a><a href="/sessions" data-roles="admin,teacher">Órák</a><a href="/analytics" data-roles="admin,teacher">Összesítők és export</a><a href="/imports" data-roles="admin">Import</a><a href="/account" data-roles="admin,teacher">Fiók</a><a href="/login" id="loginLink">Belépés</a><button class="button logout" id="logoutButton" type="button" hidden>Kilépés</button></nav>
+<div class="container">{% block content %}{% endblock %}</div>
+<script>
+(function () {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, options) {
+    options = options || {};
+    const url = typeof input === 'string' ? input : input.url;
+    if (url && url.indexOf('/api/') === 0 && url.indexOf('/api/auth/login') !== 0) {
+      const token = localStorage.getItem('attendanceToken');
+      if (token) {
+        const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
+        headers.set('Authorization', 'Bearer ' + token);
+        options = Object.assign({}, options, {headers: headers});
+      }
+      return originalFetch(input, options).then(function (response) {
+        if (response.status === 401 && location.pathname !== '/login') location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+        return response;
+      });
+    }
+    return originalFetch(input, options);
+  };
+  const logout = document.getElementById('logoutButton');
+  if (logout) logout.addEventListener('click', function () { originalFetch('/api/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+(localStorage.getItem('attendanceToken')||'')}}).finally(function(){localStorage.removeItem('attendanceToken');location.assign('/login');}); });
+  const loginLink=document.getElementById('loginLink');
+  const token=localStorage.getItem('attendanceToken');
+  if(!token){document.querySelectorAll('[data-roles]').forEach(function(link){link.hidden=true;});if(logout)logout.hidden=true;return;}
+  originalFetch('/api/auth/me',{headers:{Authorization:'Bearer '+token}}).then(function(response){if(!response.ok)throw new Error('unauthorized');return response.json();}).then(function(identity){
+    document.querySelectorAll('[data-roles]').forEach(function(link){link.hidden=!link.dataset.roles.split(',').includes(identity.role);});
+    if(loginLink)loginLink.hidden=true;if(logout)logout.hidden=false;
+  }).catch(function(){localStorage.removeItem('attendanceToken');if(location.pathname!=='/login')location.assign('/login?next='+encodeURIComponent(location.pathname+location.search));});
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
+
+
+
+
+
+
+

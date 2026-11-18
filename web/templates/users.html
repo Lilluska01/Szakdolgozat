@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><h1>Hallgatók és kártyák</h1><p>A webes adminfiókokat ez a lista nem mutatja.</p></div></section>
+<section class="card" id="createPanel" hidden>
+  <h2>Új hallgató vagy oktató</h2>
+  <form id="userForm" class="form-grid">
+    <label>Név<input class="input" id="userName" maxlength="160" required></label>
+    <label>Fióktípus<select class="input" id="userRole"><option value="student">Hallgató - nincs webes belépése</option><option value="teacher">Oktató - webes belépéssel</option></select></label>
+    <label id="neptunField">Neptun-kód<input class="input" id="userNeptun" maxlength="6"></label>
+    <label id="emailField" hidden>E-mail-cím<input class="input" id="userEmail" type="email" autocomplete="off"></label>
+    <label id="passwordField" hidden>Ideiglenes jelszó<input class="input" id="userPassword" type="password" minlength="8" autocomplete="new-password"></label>
+    <button class="button" type="submit">Létrehozás</button>
+  </form>
+  <p class="muted">Az oktatói jelszót a rendszer bcrypt hashként tárolja. Hallgatói fiókkal nem lehet belépni.</p>
+  <p id="createMessage" class="message" role="status"></p>
+</section>
+<section class="card">
+  <div class="section-heading"><h2>Felhasználók</h2><div class="toolbar"><select id="roleFilter" class="input compact" hidden><option value="student">Hallgatók</option><option value="teacher">Oktatók</option><option value="all">Mindkettő</option></select><input id="search" class="input compact" placeholder="Keresés név, Neptun vagy kártya alapján"><button id="refresh" class="button secondary" type="button">Frissítés</button></div></div>
+  <p id="listMessage" class="message" role="status"></p>
+  <div class="table-scroll"><table><thead><tr><th>Név</th><th>Szerepkör</th><th>Neptun</th><th>Hozzárendelt kártya</th><th>Állapot</th><th>Műveletek</th></tr></thead><tbody id="usersTable"></tbody></table></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const table=document.getElementById('usersTable');
+const listMessage=document.getElementById('listMessage');
+const roleFilter=document.getElementById('roleFilter');
+let identity=null;
+async function requestJson(url,options={}){const response=await fetch(url,options);const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||'A kérés nem sikerült.');return data;}
+function setTeacherFields(){const teacher=document.getElementById('userRole').value==='teacher';document.getElementById('neptunField').hidden=teacher;document.getElementById('emailField').hidden=!teacher;document.getElementById('passwordField').hidden=!teacher;document.getElementById('userEmail').required=teacher;document.getElementById('userPassword').required=teacher;document.getElementById('userNeptun').required=!teacher;}
+async function loadUsers(){table.replaceChildren();listMessage.textContent='Betöltés…';try{const role=identity.role==='admin'?roleFilter.value:'student';const query=new URLSearchParams({role,q:document.getElementById('search').value,limit:'1000'});const rows=await requestJson('/api/users/?'+query);for(const user of rows){const row=document.createElement('tr');for(const value of [user.name,user.role==='teacher'?'Oktató':'Hallgató',user.neptun||'-',user.card_id||'Nincs hozzárendelve',user.active?'Aktív':'Letiltva']){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}const actions=document.createElement('td');if(identity.role==='admin'){if(user.role==='student'){const card=document.createElement('button');card.className='button secondary';card.textContent=user.card_id?'Kártyacsere':'Kártya hozzárendelése';card.addEventListener('click',()=>assignCard(user));actions.appendChild(card);}const toggle=document.createElement('button');toggle.className='button secondary';toggle.textContent=user.active?'Letiltás':'Újraaktiválás';toggle.addEventListener('click',()=>toggleUser(user));actions.appendChild(toggle);const remove=document.createElement('button');remove.className='button secondary';remove.textContent='Eltávolítás';remove.addEventListener('click',()=>deleteUser(user));actions.appendChild(remove);}row.appendChild(actions);table.appendChild(row);}listMessage.textContent=rows.length?`${rows.length} rekord`:'Nincs megjeleníthető felhasználó.';listMessage.className='message muted';}catch(error){listMessage.textContent=error.message;listMessage.className='message error';}}
+async function assignCard(user){const cardId=prompt(`Olvasd be vagy add meg ${user.name} kártyájának UID-jét:`);if(!cardId)return;try{await requestJson(`/api/users/${user.id}/assign_card`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:cardId})});await loadUsers();}catch(error){listMessage.textContent=error.message;listMessage.className='message error';}}
+async function toggleUser(user){try{await requestJson(`/api/users/${user.id}/toggle`,{method:'POST'});await loadUsers();}catch(error){listMessage.textContent=error.message;listMessage.className='message error';}}
+async function deleteUser(user){if(!confirm(`${user.name} eltávolítása? A kártya felszabadul, a régi jelenléti előzmények megmaradnak.`))return;try{await requestJson(`/api/users/${user.id}`,{method:'DELETE'});await loadUsers();}catch(error){listMessage.textContent=error.message;listMessage.className='message error';}}
+document.getElementById('userRole').addEventListener('change',setTeacherFields);
+document.getElementById('userForm').addEventListener('submit',async event=>{event.preventDefault();const role=document.getElementById('userRole').value;const payload={name:document.getElementById('userName').value,role,neptun:role==='student'?document.getElementById('userNeptun').value:null,email:role==='teacher'?document.getElementById('userEmail').value:null,password:role==='teacher'?document.getElementById('userPassword').value:null};const output=document.getElementById('createMessage');try{await requestJson('/api/users/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});output.textContent='A felhasználó létrejött.';output.className='message success';event.target.reset();setTeacherFields();await loadUsers();}catch(error){output.textContent=error.message;output.className='message error';}});
+document.getElementById('search').addEventListener('input',loadUsers);document.getElementById('refresh').addEventListener('click',loadUsers);roleFilter.addEventListener('change',loadUsers);
+document.addEventListener('DOMContentLoaded',async()=>{try{identity=await requestJson('/api/auth/me');if(identity.role==='admin'){document.getElementById('createPanel').hidden=false;roleFilter.hidden=false;}else{document.getElementById('createPanel').remove();}setTeacherFields();await loadUsers();}catch(error){listMessage.textContent=error.message;}});
+</script>
+{% endblock %}

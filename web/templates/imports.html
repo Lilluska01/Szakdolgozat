@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><h1>Hallgatói import</h1><p>CSV vagy XLSX fájl ellenőrzése, előnézete és importálása.</p></div><button class="button secondary" id="downloadTemplate" type="button">Minta CSV</button></section>
+<section class="card">
+  <h2>Fájl kiválasztása</h2>
+  <p>Elvárt oszlopok: <strong>Név</strong> és <strong>Neptun-kód</strong>. Az e-mail megadása opcionális. Egy fájl legfeljebb 5 000 sort és 1,5 MB-ot tartalmazhat.</p>
+  <form id="importForm" class="toolbar">
+    <input id="studentFile" class="input compact" type="file" accept=".csv,.xlsx" required>
+    <button class="button secondary" id="previewImport" type="button">Ellenőrzés és előnézet</button>
+    <button class="button" id="commitImport" type="submit" disabled>Érvényes sorok importálása</button>
+  </form>
+  <p id="importMessage" class="message" role="status"></p>
+</section>
+<section class="card" id="previewCard" hidden>
+  <h2>Előnézet</h2>
+  <div id="previewSummary" class="summary-grid"></div>
+  <div class="table-scroll"><table><thead><tr><th>Név</th><th>Neptun-kód</th><th>E-mail</th></tr></thead><tbody id="previewRows"></tbody></table></div>
+  <h3>Ellenőrzési hibák</h3>
+  <div class="table-scroll"><table><thead><tr><th>Sor</th><th>Mező</th><th>Probléma</th></tr></thead><tbody id="previewErrors"></tbody></table></div>
+</section>
+<section class="card">
+  <div class="section-heading"><h2>Korábbi importok</h2><button class="button secondary" id="refreshHistory">Frissítés</button></div>
+  <div class="table-scroll"><table><thead><tr><th>Időpont</th><th>Fájl</th><th>Rögzítette</th><th>Sorok</th><th>SHA-256</th></tr></thead><tbody id="importHistory"></tbody></table></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+let previewData=null;
+const importMessage=document.getElementById('importMessage');
+document.getElementById('downloadTemplate').addEventListener('click',async()=>{
+  try{const response=await fetch('/api/export/templates/students.csv');if(!response.ok){let message='A minta CSV letöltése sikertelen.';try{const data=await response.json();message=data.message||message;}catch{}throw new Error(message);}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='hallgatok-minta.csv';link.click();URL.revokeObjectURL(url);}
+  catch(error){importMessage.textContent=error.message;importMessage.className='message error';}
+});
+async function sendFile(path){const file=document.getElementById('studentFile').files[0];if(!file)throw new Error('Előbb válassz fájlt.');const form=new FormData();form.append('file',file);const response=await fetch(path,{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.message||data.preview?.message||data.error||'A művelet sikertelen.');return data;}
+function renderPreview(data){
+  previewData=data;document.getElementById('previewCard').hidden=false;
+  document.getElementById('commitImport').disabled=!data.can_import;
+  const summary=document.getElementById('previewSummary');summary.replaceChildren();
+  for(const [label,value] of [['Fájl',data.file_name],['Összes sor',data.total_rows],['Érvényes',data.valid_rows],['Hibás',data.invalid_rows]]){const box=document.createElement('div');box.className='metric';const strong=document.createElement('strong');strong.textContent=value;const small=document.createElement('span');small.textContent=label;box.append(strong,small);summary.appendChild(box);}
+  const rows=document.getElementById('previewRows');rows.replaceChildren();
+  for(const student of data.sample){const row=document.createElement('tr');for(const value of [student.name,student.neptun,student.email||'-']){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}rows.appendChild(row);}
+  const errors=document.getElementById('previewErrors');errors.replaceChildren();
+  for(const issue of data.errors){const row=document.createElement('tr');for(const value of [issue.row,issue.field,issue.message]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}errors.appendChild(row);}
+}
+document.getElementById('previewImport').addEventListener('click',async()=>{
+  importMessage.textContent='Feldolgozás…';importMessage.className='message';
+  try{renderPreview(await sendFile('/api/users/import/preview'));importMessage.textContent='Az előnézet elkészült.';importMessage.className='message success';}
+  catch(error){previewData=null;document.getElementById('commitImport').disabled=true;importMessage.textContent=error.message;importMessage.className='message error';}
+});
+document.getElementById('importForm').addEventListener('submit',async event=>{
+  event.preventDefault();if(!previewData?.can_import)return;
+  if(!confirm(`${previewData.valid_rows} hallgató kerüljön az adatbázisba?`))return;
+  try{const result=await sendFile('/api/users/import/commit');importMessage.textContent=`Import kész: ${result.inserted_rows} új hallgató.`;importMessage.className='message success';previewData=null;document.getElementById('commitImport').disabled=true;loadHistory();}
+  catch(error){importMessage.textContent=error.message;importMessage.className='message error';}
+});
+async function loadHistory(){
+  const body=document.getElementById('importHistory');body.replaceChildren();
+  try{const response=await fetch('/api/users/import/history');const data=await response.json();if(!response.ok)throw new Error(data.message||'Nincs jogosultság.');
+    for(const batch of data){const row=document.createElement('tr');for(const value of [new Date(batch.created_at).toLocaleString('hu-HU'),batch.file_name,batch.actor_name||'-',`${batch.inserted_rows}/${batch.total_rows}`,batch.file_sha256.slice(0,16)+'…']){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);}body.appendChild(row);}
+  }catch(error){importMessage.textContent=error.message;}
+}
+document.getElementById('refreshHistory').addEventListener('click',loadHistory);
+document.addEventListener('DOMContentLoaded',loadHistory);
+</script>
+{% endblock %}
+
+

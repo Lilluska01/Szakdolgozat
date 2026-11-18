@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card" style="max-width:440px;margin:30px auto;width:100%">
+  <h2>Bejelentkezés</h2>
+  <p>A webes adminisztráció eléréséhez adminisztrátori vagy oktatói fiók szükséges.</p>
+  <form id="loginForm">
+    <label for="email">E-mail-cím</label>
+    <input class="input" id="email" name="email" type="email" autocomplete="username" required>
+    <label for="password">Jelszó</label>
+    <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="button" type="submit">Belépés</button>
+  </form>
+  <p id="loginError" role="alert" style="color:#a22"></p>
+</section>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(event) {
+  event.preventDefault();
+  const output = document.getElementById('loginError');
+  output.textContent = '';
+  try {
+    const response = await fetch('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Sikertelen bejelentkezés.');
+    localStorage.setItem('attendanceToken', data.token);
+    const identityResponse=await fetch('/api/auth/me');
+    const identity=await identityResponse.json();
+    const fallback='/';
+    const target=new URLSearchParams(location.search).get('next')||fallback;
+    location.assign(target.startsWith('/')&&!target.startsWith('//')?target:fallback);
+  } catch (error) { output.textContent = error.message; }
+});
+</script>
+{% endblock %}
+
+
+
