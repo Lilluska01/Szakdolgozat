@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+.idea/
+.docx_review/
+.essay_review/
+logs/*
+!logs/__init__.py
+uploads/*
+!uploads/__init__.py
+PletserLilla_Szakdolgozat_javitott.docx
+reports/jelenleti_riport.xlsx
